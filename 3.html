@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0"
+    />
+    <title>HeartCanvas</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+      }
+
+      html,
+      body {
+        height: 100%;
+        background-color: #000;
+      }
+    </style>
+  </head>
+
+  <body>
+    <canvas id="heart"></canvas>
+    <script>
+      // 生成指定范围随机数 起始值 n，结束值 m，布尔型参数 flag，默认为 true
+      function rand(n, m, flag = true) {
+        var c = m - n;
+        if (flag) {
+          return Math.floor(Math.random() * c + n);
+        } else {
+          return Math.random() * c + n;
+        }
+      }
+      // 心形图案的起始角度
+      function generatorHeart(t, scale = 12) {
+        // x = 16sin³t
+        let x = 16 * Math.sin(t) ** 3;
+        // y = 13cost-5cos2t-2cos3t-cos4t
+        let y = -(
+          13 * Math.cos(t) -
+          5 * Math.cos(2 * t) -
+          2 * Math.cos(3 * t) -
+          Math.cos(4 * t)
+        );
+        x = x * scale + width / 2;
+        y = y * scale + height / 2;
+        return new Point(x, y, 0);
+      }
+      // 曲线
+      function curve(x) {
+        // 4sin4x/2π
+        return (2 * (2 * Math.sin(4 * x))) / (2 * Math.PI);
+      }
+      // 生成散开的心形点 β 散点的半径
+      function scatterHeart(point, beta = 0.15) {
+        // 指数分布的随机数 使得生成的点在离中心点越远的位置越少
+        let ratio_x = -beta * Math.log(Math.random());
+        let ratio_y = -beta * Math.log(Math.random());
+        // 新的坐标偏移量
+        let dx = ratio_x * (point.x - width / 2);
+        let dy = ratio_y * (point.y - height / 2);
+        // 生成以指定点为中心的散开的心形点
+        return new Point(point.x - dx, point.y - dy);
+      }
+      // 生成收缩的心形点
+      function shrinkHeart(point, ratio) {
+        // 根据点到中心点的距离计算出的力的大小 力与点离中心点的距离成反比，距离越近，力越大
+        let force =
+          -1 /
+          ((point.x - width / 2) ** 2 + (point.y - height / 2) ** 2) ** 0.6;
+        let dx = ratio * force * (point.x - width / 2);
+        let dy = ratio * force * (point.y - height / 2);
+        // 生成以指定点为中心的收缩的心形点
+        return new Point(point.x - dx, point.y - dy, 0);
+      }
+      // 声明 Point 类
+      class Point {
+        // 构造函数
+        constructor(x, y, size) {
+          this.x = x;
+          this.y = y;
+          this.size = size;
+        }
+      }
+      class Heart {
+        constructor(particles, generateFrame) {
+          this.particles = particles; // 心形图案中的粒子数量
+          this.generateFrame = generateFrame; // 生成框架
+          this.boardHeart = []; // 爱心的轮廓
+          this.middleHeart = []; // 爱心轮廓内部
+          this.centerHeart = []; // 爱心中间
+          this.allHearts = []; // 所有的爱心粒子
+          this.initHeart(); // 初始化爱心内部粒子
+
+          for (let i = 0; i < generateFrame; i++) {
+            this.calcFrame(i); // 计算 20 帧图像
+          }
+        }
+        // 初始化爱心内部粒子
+        initHeart() {
+          // 使用一个for循环遍历particles次，每次循环都创建一个心形图案
+          for (let i = 0; i < this.particles; i++) {
+            // 生成一个随机角度（0到360度）
+            const deg = (2 * Math.PI * rand(0, 360)) / 360;
+            // 根据随机角度生成一个心形图案
+            this.boardHeart.push(generatorHeart(deg));
+          }
+          // 使用forEach方法遍历boardHeart数组，对每个点应用散点效果
+          this.boardHeart.forEach((point) => {
+            for (let j = 0; j < 3; j++) {
+              this.middleHeart.push(
+                // 使用scatterHeart函数计算散点效果的坐标
+                scatterHeart(point, 0.05 * rand(j, j + 1, false))
+              );
+            }
+          });
+          // 遍历particles * 2次
+          for (let i = 0; i < this.particles * 2; i++) {
+            const ii = rand(0, this.boardHeart.length - 1);
+            this.centerHeart.push(scatterHeart(this.boardHeart[ii], 0.17));
+          }
+          // 遍历particles / 4次
+          for (let i = 0; i < this.particles / 4; i++) {
+            const ii = rand(0, this.boardHeart.length - 1);
+            this.centerHeart.push(scatterHeart(this.boardHeart[ii], 0.35));
+          }
+        }
+        // 计算给定点的下一个位置，通过计算引力力并应用随机偏移
+        calc_position(point, ratio) {
+          const force =
+            1 /
+            ((point.x - width / 2) ** 2 + (point.y - height / 2) ** 2) ** 0.52;
+          const dx = ratio * force * (point.x - width / 2) + rand(-1, 1, false);
+          const dy =
+            ratio * force * (point.y - height / 2) + rand(-1, 1, false);
+
+          return new Point(point.x - dx, point.y - dy, 0);
+        }
+
+        // 生成了随机散点效果
+        calcFrame(frame) {
+          // 比例
+          const ratio = 20 * curve((frame / 18) * Math.PI);
+          // 光环半径
+          const haloRadius = Math.floor(
+            4 + 6 * (1 + curve((frame / 18) * Math.PI))
+          );
+          const haloNums = Math.floor(
+            this.particles * 2 +
+              this.particles * 3 * Math.abs(curve((frame / 18) * Math.PI) ** 2)
+          );
+          // 存储当前帧的粒子位置
+          const nowFramePoints = [];
+          // 存储已经生成的粒子位置
+          const haloSet = new Set();
+          for (let i = 0; i < haloNums; i++) {
+            // 每次循环都生成一个随机角度delta
+            const delta = rand(0, 360);
+            // 使用generatorHeart函数生成一个心形图案point
+            let point = generatorHeart(2 * Math.PI * (delta / 360));
+            // 使用shrinkHeart函数缩小point，并设置其随机偏移
+            let shrinkPoint = shrinkHeart(point, haloRadius);
+            // 检查haloSet中是否已经生成过这个粒子位置。如果没有，则将生成的粒子添加到nowFramePoints数组中，并将其位置添加到haloSet中。
+            if (
+              !haloSet.has(
+                JSON.stringify([
+                  Math.floor(shrinkPoint.x),
+                  Math.floor(shrinkPoint.y),
+                ])
+              )
+            ) {
+              shrinkPoint.x += rand(-20, 20);
+              shrinkPoint.y += rand(-20, 20);
+              shrinkPoint.size = rand(0.4, 1.4, false);
+              nowFramePoints.push(shrinkPoint);
+              haloSet.add(
+                JSON.stringify([
+                  Math.floor(shrinkPoint.x),
+                  Math.floor(shrinkPoint.y),
+                ])
+              );
+            }
+          }
+          // 爱心的轮廓
+          this.boardHeart.forEach((point) => {
+            const calcPoint = this.calc_position(point, ratio);
+            calcPoint.size = rand(0.6, 1.6, false);
+            nowFramePoints.push(calcPoint);
+          });
+          // 爱心轮廓内部
+          this.middleHeart.forEach((point) => {
+            const calcPoint = this.calc_position(point, ratio);
+            calcPoint.size = rand(0.4, 1.4, false);
+            nowFramePoints.push(calcPoint);
+          });
+          // 爱心中间
+          this.centerHeart.forEach((point) => {
+            const calcPoint = this.calc_position(point, ratio);
+            calcPoint.size = rand(0.4, 1.4, false);
+            nowFramePoints.push(calcPoint);
+          });
+
+          this.allHearts[frame] = nowFramePoints;
+        }
+      }
+
+      //
+      function drawHeart(context, points) {
+        points.forEach((point) => {
+          context.beginPath();
+          // #ed1c24
+          // #003EDB
+          // "#00A2E9"
+          context.fillStyle = "#ff0000"; // 填充颜色
+          // 绘制一个圆弧，圆心坐标为当前点的x坐标和y坐标，半径为当前点的size，起始角度为0，结束角度为2π。
+          context.arc(point.x, point.y, point.size, 0, Math.PI * 2);
+          // 填充路径内的区域
+          context.fill();
+          // 关闭路径，使填充颜色保持到路径之外的区域
+          context.closePath();
+        });
+      }
+
+      const width = window.innerWidth;
+      const height = window.innerHeight;
+      const heartCanvas = document.getElementById("heart");
+      const heartCtx = heartCanvas.getContext("2d");
+      heartCanvas.width = width;
+      heartCanvas.height = height;
+      // 控制动画的进度
+      function render(k) {
+        // 清除canvas上的所有内容
+        heartCtx.clearRect(0, 0, width, height);
+        // 调用drawHeart函数绘制心形
+        drawHeart(heartCtx, heartCls.allHearts[k]);
+      }
+      const heartCls = new Heart(2000, 20);
+
+      let k = 0;
+      // 实现动画效果
+      // 每隔4ms刷新一次页面
+      (function animateloop() {
+        k++;
+        k = k % 80; // 取模
+        if (k % 4 === 0) {
+          // 每次循环时显示不同的心形图案
+          render(k / 4);
+        }
+        // 使用requestAnimationFrame方法调用animateloop函数，实现动画效果
+        requestAnimationFrame(animateloop);
+      })();
+    </script>
+  </body>
+</html>
